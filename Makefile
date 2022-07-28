@@ -1,3 +1,4 @@
+# create-release v=<version>
 create-release:
 	mkdir release-$(v)
 	go build cmd/app/passman.go
