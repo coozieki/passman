@@ -9,7 +9,7 @@ type (
 	}
 
 	DataProvider interface {
-		GetFile(filename string) []byte
+		GetFile(filename string) ([]byte, error)
 		SaveFile(filename string, data []byte)
 	}
 	Encryptor interface {

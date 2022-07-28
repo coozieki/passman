@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"golang.org/x/term"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"passman/internal/encryptor"
 	"passman/internal/interfaces"
 	"passman/internal/parser"
+	"passman/internal/providers"
 	"passman/internal/providers/drive"
 	"passman/internal/renderer"
 	"strconv"
@@ -35,6 +37,30 @@ type app struct {
 }
 
 func (a *app) Run(args []string) {
+	var encryptedBytes []byte
+
+	open, err := os.Open(defaultFilename)
+	if err != nil {
+		encryptedBytes, err = a.dataProvider.GetFile(defaultFilename)
+		if errors.Is(err, providers.ErrFileNotFound) {
+			fmt.Println("Creating new database file...")
+			fmt.Println("Enter file password: ")
+
+			inputReader := bufio.NewReader(os.Stdin)
+			a.password = readInput(inputReader)
+			a.saveRecords([]interfaces.Record{})
+			fmt.Println("Database file created")
+
+			return
+		}
+		log.Fatal("error while getting file from provider: ", err)
+	} else {
+		encryptedBytes, err = io.ReadAll(open)
+		if err != nil {
+			log.Fatal("error while reading file: ", err)
+		}
+	}
+
 	fmt.Print("Enter Password: ")
 
 	bytePassword, err := term.ReadPassword(int(syscall.Stdin))
@@ -45,19 +71,6 @@ func (a *app) Run(args []string) {
 	fmt.Println()
 
 	a.password = string(bytePassword)
-
-	var encryptedBytes []byte
-
-	open, err := os.Open(defaultFilename)
-	if err != nil {
-		encryptedBytes = a.dataProvider.GetFile(defaultFilename)
-	} else {
-		encryptedBytes, err = io.ReadAll(open)
-		if err != nil {
-			log.Fatal("error while reading file: ", err)
-		}
-	}
-
 	bytes := a.encryptor.Decrypt(encryptedBytes, []byte(a.password))
 	records := a.parser.Parse(bytes)
 
@@ -110,7 +123,7 @@ func (a *app) Run(args []string) {
 
 			return
 		case "refresh":
-			encryptedBytes = a.dataProvider.GetFile(defaultFilename)
+			encryptedBytes, _ = a.dataProvider.GetFile(defaultFilename)
 			bytes := a.encryptor.Decrypt(encryptedBytes, []byte(a.password))
 			records = a.parser.Parse(bytes)
 			a.renderer.Render(records)

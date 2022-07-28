@@ -16,40 +16,44 @@ import (
 	"net/http"
 	"os"
 	"passman/internal/interfaces"
+	"passman/internal/providers"
 )
 
 type googleDrive struct {
 	srv *drive.Service
 }
 
-func (g *googleDrive) GetFile(filename string) []byte {
+func (g *googleDrive) GetFile(filename string) ([]byte, error) {
 	if g.srv == nil {
 		g.connect()
 	}
 
 	listRes, err := g.srv.Files.List().Do(googleapi.QueryParameter("q", fmt.Sprintf("name='%s'", filename)))
 	if err != nil {
-		log.Fatal("error while getting file id: ", err)
+		return nil, err
+	}
+
+	if len(listRes.Files) == 0 {
+		return nil, providers.ErrFileNotFound
 	}
 
 	getRes, err := g.srv.Files.Export(listRes.Files[0].Id, "text/plain").Download()
 	if err != nil {
-		log.Fatal("error while downloading file: ", err)
+		return nil, err
 	}
 
 	bytes, err := io.ReadAll(getRes.Body)
 	if err != nil {
-		log.Fatal("error while reading body: ", err)
+		return nil, err
 	}
 
 	bytes = bytes[3:]
 
-	err = os.WriteFile(filename, bytes, 0666)
-	if err != nil {
-		log.Fatal("error while writing file: ", err)
+	if err = os.WriteFile(filename, bytes, 0666); err != nil {
+		return nil, err
 	}
 
-	return bytes
+	return bytes, nil
 }
 
 func (g *googleDrive) SaveFile(filename string, data []byte) {
@@ -70,6 +74,15 @@ func (g *googleDrive) SaveFile(filename string, data []byte) {
 	listRes, err := g.srv.Files.List().Do(googleapi.QueryParameter("q", fmt.Sprintf("name='%s'", filename)))
 	if err != nil {
 		log.Fatal("error while getting file id: ", err)
+	}
+
+	if len(listRes.Files) == 0 {
+		_, err = g.srv.Files.Create(&drive.File{Name: filename}).Media(open).Do()
+		if err != nil {
+			log.Fatal("error while updating file: ", err)
+		}
+
+		return
 	}
 
 	_, err = g.srv.Files.Update(listRes.Files[0].Id, &drive.File{}).Media(open).Do()
