@@ -28,6 +28,7 @@ type App interface {
 }
 
 type app struct {
+	records  []interfaces.Record
 	password string
 
 	dataProvider interfaces.DataProvider
@@ -72,107 +73,41 @@ func (a *app) Run(args []string) {
 
 	a.password = string(bytePassword)
 	bytes := a.encryptor.Decrypt(encryptedBytes, []byte(a.password))
-	records := a.parser.Parse(bytes)
+	a.records = a.parser.Parse(bytes)
 
 	switch {
 	case len(args) > 1:
 		switch args[1] {
 		case "create":
-			record := &interfaces.Record{}
-			inputReader := bufio.NewReader(os.Stdin)
-
-			fmt.Print("Name: ")
-			record.Name = readInput(inputReader)
-			fmt.Print("Login: ")
-			record.Login = readInput(inputReader)
-			fmt.Print("Password: ")
-			record.Password = readInput(inputReader)
-			fmt.Print("Description: ")
-			record.Description = readInput(inputReader)
-
-			records = append(records, *record)
-			a.saveRecords(records)
-			a.renderer.Render(records)
-
-			return
+			a.create()
 		case "list":
-			a.renderer.Render(records)
-			return
+			a.renderer.Render(a.records)
 		case "remove":
 			if len(args) < 3 {
 				log.Fatal("record ID is not provided for removal")
 			}
 
-			index, err := strconv.Atoi(args[2])
+			id, err := strconv.Atoi(args[2])
 			if err != nil {
 				log.Fatal("ID must be a numeric value")
 			}
 
-			if index < 1 || index > len(records) {
-				log.Fatal("ID is out of range")
-			}
-
-			if index == len(records) {
-				records = records[:len(records)-1]
-			} else {
-				records = append(records[:index-1], records[index:]...)
-			}
-
-			a.saveRecords(records)
-			a.renderer.Render(records)
-
-			return
+			a.remove(id)
 		case "refresh":
-			encryptedBytes, _ = a.dataProvider.GetFile(defaultFilename)
-			bytes := a.encryptor.Decrypt(encryptedBytes, []byte(a.password))
-			records = a.parser.Parse(bytes)
-			a.renderer.Render(records)
+			a.refresh()
 		case "change_password":
-			fmt.Print("New password: ")
-			newPass, err := term.ReadPassword(int(syscall.Stdin))
-			if err != nil {
-				log.Fatal("error while getting new password: ", err)
-			}
-
-			fmt.Println()
-			fmt.Print("Confirm password: ")
-			confirmPass, err := term.ReadPassword(int(syscall.Stdin))
-			if err != nil {
-				log.Fatal("error while getting confirm password: ", err)
-			}
-
-			if string(newPass) != string(confirmPass) {
-				log.Fatal("passwords do not match")
-			}
-
-			a.password = string(newPass)
-			a.saveRecords(records)
-
-			fmt.Println()
-			fmt.Println("password changed successfully")
-
-			return
+			a.changePassword()
 		case "search":
 			if len(args) < 3 {
 				log.Fatal("search term is not provided")
 			}
 
-			var filteredRecords []interfaces.Record
-
-			for _, record := range records {
-				if strings.Contains(record.Name, args[2]) {
-					filteredRecords = append(filteredRecords, record)
-				}
-			}
-
-			a.renderer.Render(filteredRecords)
-
-			return
+			a.search(args[2])
 		default:
 			log.Fatal("unknown argument: ", args[1])
 		}
 	default:
-		a.renderer.Render(records)
+		a.renderer.Render(a.records)
 		return
 	}
 }
