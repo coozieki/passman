@@ -54,7 +54,10 @@ func (a *app) Run(args []string) {
 
 			return
 		}
-		log.Fatal("error while getting file from provider: ", err)
+
+		if err != nil {
+			log.Fatal("error while getting file from provider: ", err)
+		}
 	} else {
 		encryptedBytes, err = io.ReadAll(open)
 		if err != nil {
